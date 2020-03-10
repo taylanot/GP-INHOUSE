@@ -26,12 +26,16 @@ class GPR:
         self.X          = X
         self.y          = y
         self.stab       = 1e-6
+        self.bound      = ()
         self.params     = self.hyperparams()
         self.LML        = self.likelihood(self.params)
     # Initialize hyperparamters for optimization
     def hyperparams(self):
         hyper           = np.log(np.ones(self.dim+1))
         self.id_theta   = np.arange(hyper.shape[0])
+        for i in range(0,self.dim+1):
+            self.bound  += ((1e-6,None),)
+        print self.bound
         if self.noise is not None and self.noise_fix is False:
             logsigma_n = np.log(np.array([self.noise]))
             hyper      = np.concatenate([hyper,logsigma_n])
@@ -310,8 +314,8 @@ class multiGPR():
         self.alpha = alpha
 
 
-        NLML   = 0.5*self.Ne*np.log(hyper[0]) + 0.5*np.sum(np.log(np.diag(L))) +\
-                0.5*np.matmul((self.ye-rho*self.mc).T,alpha)/hyper[0]
+        NLML   = 0.5*self.Ne*hyper[0] + 0.5*np.sum(np.log(np.diag(L))) +\
+                0.5*np.matmul((self.ye-rho*self.mc).T,alpha)/np.exp(hyper[0])
         return NLML
 
     def optimize(self):
