@@ -1,4 +1,3 @@
-
 import autograd.numpy as np
 from autograd import value_and_grad
 from scipy.optimize import minimize
@@ -31,31 +30,30 @@ class GPR:
         self.LML        = self.likelihood(self.params)
     # Initialize hyperparamters for optimization
     def hyperparams(self):
-        hyper           = np.log(np.ones(self.dim+1))
+        hyper           = np.ones(self.dim+1)
         self.id_theta   = np.arange(hyper.shape[0])
         for i in range(0,self.dim+1):
             self.bound  += ((1e-6,None),)
-        print self.bound
         if self.noise is not None and self.noise_fix is False:
-            logsigma_n = np.log(np.array([self.noise]))
-            hyper      = np.concatenate([hyper,logsigma_n])
+            sigma_n = np.array([self.noise])
+            hyper      = np.concatenate([hyper,sigma_n])
+            self.bound += ((1e-6,None),)
         return hyper
 
     # Create RBF covariance matrix
     def RBF(self,hyper,xi,xj=None):
         if xj is None:
             xj = xi
-        sigma_f     = np.exp(hyper[0])
-        lengthscale = np.exp(hyper[1:])
-        r           = np.expand_dims(xi/lengthscale,1) - \
-                      np.expand_dims(xj/lengthscale,0)
+        sigma_f     = hyper[0]
+        lengthscale = hyper[1:]
+        r           = np.expand_dims(xi*lengthscale,1) - \
+                      np.expand_dims(xj*lengthscale,0)
         return sigma_f * np.exp(-0.5 * np.sum(r**2,axis=2))
 
     # Objective function to be minimized
     def likelihood(self,hyper):
         if self.noise is not None and self.noise_fix is False:
-            logsigma_n  = hyper[-1]
-            sigma_n     = np.exp(logsigma_n)
+            sigma_n  = hyper[-1]
 
         else:
             sigma_n = 0.
@@ -67,11 +65,26 @@ class GPR:
         alpha = np.linalg.solve(L.T,np.linalg.solve(L,self.y))
         LML   = -0.5 * np.matmul(self.y.T,alpha)  - np.sum(np.log(np.diag(L))) - \
                 0.5 * np.log(2.*np.pi) * self.N
+        self.LML = LML
         return -LML
-    def optimize(self):
-        res = minimize(value_and_grad(self.likelihood), self.params,
+    def optimize(self,restart=None):
+        if restart is None:
+            res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
                             jac=True, method='L-BFGS-B',callback=self.likelihood)
-        self.params = res.x
+            self.params = res.x
+        else:
+            counter = 0
+            obj     = self.LML
+            while (counter <= restart):
+                self.params = np.random.rand(self.params.size)
+                res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
+                                jac=True, method='L-BFGS-B',callback=self.likelihood)
+                self.params = res.x
+                counter += 1
+                if res.fun < -self.LML:
+                    obj = res.fun
+                    self.params = res.x
+
     def inference(self,x,return_std=False):
         k_s   = self.RBF(self.theta,x,self.X)
         k_ss  = self.RBF(self.theta,x,x)
@@ -86,7 +99,8 @@ class GPR:
             return mean,std
     def plot(self,name,plot_std=False):
         x = np.linspace(np.min(self.X),np.max(self.X),100).reshape(-1,1)
-        self.optimize();
+        self.optimize(restart=5)
+        self.likelihood(self.params)
         mean,std = self.inference(x,return_std=True)
         plt.plot(x,mean,"--",label='GPR-'+str(name), color='deepskyblue')
         if plot_std is True:
@@ -102,7 +116,6 @@ class GPR:
 ################################################################################
 class coGPR():
     """docstring for coGPR."""
-
     def __init__(self, Xc, Xe, yc, ye, noise_var_c=None, noise_fix_c=False,
                     noise_var_e=None, noise_fix_e=False):
         self.dim          = Xc.shape[1]
@@ -119,61 +132,70 @@ class coGPR():
         self.yc           = yc
         self.y            = np.vstack((yc,ye))
         self.stab         = 1e-6
+        self.bound       = ()
         self.params       = self.hyperparams()
         self.LML          = self.likelihood(self.params)
 
     def hyperparams(self):
-        hyper_c = np.log(np.ones(self.dim+1))
+        # Cheap hyperparameters
+        hyper_c = np.ones(self.dim+1)
         self.id_theta_c = np.arange(hyper_c.shape[0])
+        for i in range(0,self.dim+1):
+            self.bound += ((1e-6,None),)
         if self.noise_c is not None and self.noise_fix_c is False:
-            logsigma_n_c = np.log(np.array([self.noise_c]))
-            hyper_c      = np.concatenate([hyper_c,logsigma_n_c])
-
-        hyper_e = np.log(np.ones(self.dim+1))
-
+            sigma_n_c = np.array([self.noise_c])
+            hyper_c      = np.concatenate([hyper_c,sigma_n_c])
+            self.bound += ((1e-6,None),)
+        # Expensive hyperparameters
+        hyper_e = np.ones(self.dim+1)
+        for i in range(0,self.dim+1):
+            self.bound += ((1e-6,None),)
         self.id_theta_e = np.arange(hyper_c.shape[0],hyper_c.shape[0]+\
                                                                hyper_e.shape[0])
         if self.noise_e is not None and self.noise_fix_e is False:
-            logsigma_n_e = np.log(np.array([self.noise_e]))
-            hyper_e      = np.concatenate([hyper_e,logsigma_n_e])
+            sigma_n_e = np.array([self.noise_e])
+            hyper_e   = np.concatenate([hyper_e,sigma_n_e])
+            self.bound += ((1e-6,None),)
+        # Difference hyperparameters
 
         rho = np.array([1.])
+        self.bound      += ((None,None),)
 
         hyper = np.concatenate([hyper_c,hyper_e,rho])
+
+
+
         return hyper
     def RBF(self,hyper,xi,xj=None):
         if xj is None:
             xj = xi
-        sigma_f     = np.exp(hyper[0])
-        lengthscale = np.exp(hyper[1:])
-        r           = np.expand_dims(xi/lengthscale,1) - \
-                      np.expand_dims(xj/lengthscale,0)
+        sigma_f     = hyper[0]
+        lengthscale = hyper[1:]
+        r           = np.expand_dims(xi*lengthscale,1) - \
+                      np.expand_dims(xj*lengthscale,0)
         return sigma_f * np.exp(-0.5 * np.sum(r**2,axis=2))
 
     def likelihood(self, hyper):
         if (self.noise_c is not None and self.noise_fix_c is False):
-            logsigma_n_c = hyper[2]
-            sigma_n_c    = np.exp(logsigma_n_c)
+            sigma_n_c = hyper[2]
+
             if (self.noise_e is not None and self.noise_fix_e is False):
-                logsigma_n_e = hyper[5]
-                sigma_n_e    = np.exp(logsigma_n_e)
+                sigma_n_e = hyper[5]
             else:
                 sigma_n_e = 0.
         elif (self.noise_c is None and self.noise_fix_c is False) and \
              (self.noise_e is not None and self.noise_fix_e is False):
-                logsigma_n_e = hyper[4]
-                sigma_n_e    = np.exp(logsigma_n_e)
+                sigma_n_e = hyper[4]
                 sigma_n_c    = 0.
         else:
-            sigma_n_c    = 0.
-            sigma_n_e    = 0.
+            sigma_n_c    = 1e-6
+            sigma_n_e    = 1e-6
 
         rho = hyper[-1]; self.rho = rho
         theta_c = hyper[self.id_theta_c]; self.theta_c = theta_c
         theta_e = hyper[self.id_theta_e]; self.theta_e = theta_e
         #hyper = 1.
-        K_cc = self.RBF(theta_c,self.Xc) +\
-        np.eye(self.Nc)*sigma_n_c
+        K_cc = self.RBF(theta_c,self.Xc) + np.eye(self.Nc)*sigma_n_c
 
         K_ce = rho * self.RBF(theta_c,self.Xc,self.Xe) +\
         np.vstack((np.zeros(((self.Nc-self.Ne),self.Ne)),np.eye(self.Ne)))*\
@@ -190,12 +212,29 @@ class coGPR():
         alpha = np.linalg.solve(L.T,np.linalg.solve(L,self.y));self.alpha = alpha
         LML   = -0.5 * np.matmul(self.y.T,alpha)  - np.sum(np.log(np.diag(L))) - \
                 0.5 * np.log(2.*np.pi) * self.N
+        self.LML = LML
         return -LML
 
-    def optimize(self):
-        res = minimize(value_and_grad(self.likelihood), self.params,
-                            jac=True, method='Newton-CG',callback=self.likelihood)
-        self.params = res.x
+    def optimize(self,restart=None):
+
+        if restart is None:
+            res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
+                            jac=True, method='L-BFGS-B',callback=self.likelihood)
+            self.params = res.x
+        else:
+            counter = 0
+            obj     = self.LML
+            while (counter <= restart):
+                self.params = np.random.rand(self.params.size)
+                self.params[-1] = 1
+                res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
+                                jac=True, method='L-BFGS-B',callback=self.likelihood)
+                self.params = res.x
+                counter += 1
+                if res.fun < -self.LML:
+                    obj = res.fun
+                    self.params = res.x
+
 
     def inference(self, x, return_std=False):
         self.likelihood(self.params)
@@ -220,7 +259,7 @@ class coGPR():
 
     def plot(self,name,plot_std=False):
         x = np.linspace(np.min(self.Xe),np.max(self.Xe),100).reshape(-1,1)
-        self.optimize();
+        self.optimize(restart=9);
         mean,std = self.inference(x,return_std=True)
         plt.plot(x,mean,":",label='coGPR-'+str(name), color='lime')
         if plot_std is True:
@@ -230,7 +269,7 @@ class coGPR():
                                         alpha=0.3,color='lime')
         plt.xlabel('$x$')
         plt.ylabel('$y$')
-
+        plt.legend()
 ################################################################################
 # Two Fidelity Gaussian Process Regression, Perdikaris et al./2016
 ################################################################################
@@ -259,24 +298,25 @@ class multiGPR():
         self.y            = np.vstack((yc,ye))
         self.stab         = 1e-6
         self.lowreg()
+        self.bound        = ()
         self.params       = self.hyperparams()
         self.LML          = self.likelihood(self.params)
 
     def hyperparams(self):
 
-        hyper_e = np.log(np.ones(self.dim+1)+0.1*np.ones(self.dim+1))
-
-
+        hyper_e = np.ones(self.dim+1)+0.1*np.ones(self.dim+1)
         self.id_theta_e = np.arange(hyper_e.shape[0])
+        for i in range(0,self.dim+1):
+            self.bound  += ((1e-6,None),)
 
         if self.noise_e is not None and self.noise_fix_e is False:
-            logsigma_n_e = np.log(np.array([self.noise_e]))
-            hyper_e      = np.concatenate([hyper_e,logsigma_n_e])
+            sigma_n_e = np.array([self.noise_e])
+            hyper_e   = np.concatenate([hyper_e,logsigma_n_e])
+            self.bound  += ((1e-6,None),)
 
         rho = np.array([1.])
-
+        self.bound  += ((None,None),)
         hyper = np.concatenate([hyper_e,rho])
-
         return hyper
 
     def lowreg(self):
@@ -287,17 +327,16 @@ class multiGPR():
     def RBF(self,hyper,xi,xj=None):
         if xj is None:
             xj = xi
-        sigma_f     = np.exp(hyper[0])
-        lengthscale = np.exp(hyper[1:])
-        r           = np.expand_dims(xi/lengthscale,1) - \
-                      np.expand_dims(xj/lengthscale,0)
+        sigma_f     = hyper[0]
+        lengthscale = hyper[1:]
+        r           = np.expand_dims(xi*lengthscale,1) - \
+                      np.expand_dims(xj*lengthscale,0)
         return sigma_f * np.exp(-0.5 * np.sum(r**2,axis=2))
 
     def likelihood(self, hyper):
 
         if (self.noise_e is not None and self.noise_fix_e is False):
-            logsigma_n_e = hyper[2]
-            sigma_n_e    = np.exp(logsigma_n_e)
+            sigma_n_e = hyper[2]
         else:
             sigma_n_e = 0.
 
@@ -314,14 +353,27 @@ class multiGPR():
         self.alpha = alpha
 
 
-        NLML   = 0.5*self.Ne*hyper[0] + 0.5*np.sum(np.log(np.diag(L))) +\
-                0.5*np.matmul((self.ye-rho*self.mc).T,alpha)/np.exp(hyper[0])
+        NLML   = 0.5*self.Ne*np.log(hyper[0]) + 0.5*np.sum(np.log(np.diag(L))) +\
+                0.5*np.matmul((self.ye-rho*self.mc).T,alpha)/hyper[0]
         return NLML
 
-    def optimize(self):
-        res = minimize(value_and_grad(self.likelihood), self.params,
-                            jac=True, method='Newton-CG',callback=self.likelihood)
-        self.params = res.x
+    def optimize(self,restart=None):
+        if restart is None:
+            res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
+                            jac=True, method='L-BFGS-B',callback=self.likelihood)
+            self.params = res.x
+        else:
+            counter = 0
+            obj     = self.LML
+            while (counter <= restart):
+                self.params = np.random.rand(self.params.size)
+                res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
+                                jac=True, method='L-BFGS-B',callback=self.likelihood)
+                self.params = res.x
+                counter += 1
+                if res.fun < -self.LML:
+                    obj = res.fun
+                    self.params = res.x
 
     def inference(self, x, return_std=False):
         self.likelihood(self.params)
@@ -340,7 +392,7 @@ class multiGPR():
             return mean,std
     def plot(self,name,plot_std=False):
         x = np.linspace(np.min(self.Xe),np.max(self.Xe),100).reshape(-1,1)
-        self.optimize();
+        self.optimize(restart=9);
         mean,std = self.inference(x,return_std=True)
         plt.plot(x,mean,":",label='multiGPR-'+str(name), color='lime')
         if plot_std is True:

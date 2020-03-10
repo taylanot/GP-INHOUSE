@@ -6,7 +6,7 @@
 # Import the necessary modules
 ################################################################################
 import sys;sys.dont_write_bytecode = True;
-from regression import *
+from gp import *
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.rcParams['text.usetex'] = True

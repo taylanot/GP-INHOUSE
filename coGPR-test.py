@@ -6,7 +6,7 @@
 # Import the necessary modules
 ################################################################################
 import sys;sys.dont_write_bytecode = True;
-from regression import *
+from gp import *
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.rcParams['text.usetex'] = True
@@ -36,6 +36,7 @@ reg1.plot(name='Expensive',plot_std=False)
 reg2 = coGPR(Xc,Xe,fc(Xc),fe(Xe));
 reg2.plot(name='Expensive',plot_std=False)
 m2,std2 = reg2.inference(x,return_std=True)
+print reg2.LML
 print reg2.params
 # Error Calculation
 print('coGPR ||Error|| = {}'.format(np.linalg.norm(std2)))
