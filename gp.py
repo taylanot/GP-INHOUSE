@@ -392,7 +392,7 @@ class multiGPR():
             return mean,std
     def plot(self,name,plot_std=False):
         x = np.linspace(np.min(self.Xe),np.max(self.Xe),100).reshape(-1,1)
-        self.optimize(restart=9);
+        self.optimize(restart=None);
         mean,std = self.inference(x,return_std=True)
         plt.plot(x,mean,":",label='multiGPR-'+str(name), color='lime')
         if plot_std is True:
