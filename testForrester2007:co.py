@@ -21,7 +21,7 @@ def fc(x):
     return A*fe(x) +B*(x-0.5)-C
 ################################################################################
 plt.figure(1)
-plt.subplot(211)
+plt.subplot(121)
 Xe = np.array([0,0.4,0.6,1]).reshape(-1,1)
 plt.scatter(Xe,fe(Xe),color='k',label='Expensive Sample')
 Xc = np.linspace(0,1,11).reshape(-1,1)
@@ -40,7 +40,7 @@ print reg2.LML
 print reg2.params
 # Error Calculation
 print('coGPR ||Error|| = {}'.format(np.linalg.norm(std2)))
-plt.subplot(212)
+plt.subplot(122)
 plt.plot(x,std2**2,color='k',label='variance')
 plt.xlabel('$x$')
 plt.ylabel('$variance$')
