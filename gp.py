@@ -1,8 +1,8 @@
+import random
+import matplotlib.pyplot as plt
 import autograd.numpy as np
 from autograd import value_and_grad
 from scipy.optimize import minimize
-import matplotlib.pyplot as plt
-import random
 plt.matplotlib.rc('xtick', labelsize=12)
 plt.matplotlib.rc('ytick', labelsize=12)
 plt.rcParams.update({'font.size': 16})
@@ -40,9 +40,9 @@ class GPR:
         for i in range(0,self.dim+1):
             self.bound  += ((1e-6,None),)
         if self.noise is not None and self.noise_fix is False:
-            sigma_n = np.array([self.noise])
-            hyper      = np.concatenate([hyper,sigma_n])
-            self.bound += ((1e-6,None),)
+            sigma_n     = np.array([self.noise])
+            hyper       = np.concatenate([hyper,sigma_n])
+            self.bound  += ((1e-6,None),)
         return hyper
 
     # Create RBF covariance matrix
@@ -59,12 +59,11 @@ class GPR:
         if self.noise is not None and self.noise_fix is False:
             sigma_n  = hyper[-1]
         else:
-            sigma_n = 0.
-        theta   = hyper[self.id_theta];self.theta = theta
+            sigma_n  = 0.
+        theta = hyper[self.id_theta];self.theta = theta
 
-        K = self.RBF(theta,self.X)+np.eye(self.N)*sigma_n
-        self.K = K
-        L = np.linalg.cholesky(K+np.eye(self.N)*self.stab);self.L = L
+        K = self.RBF(theta,self.X)+np.eye(self.N)*sigma_n;      self.K = K
+        L = np.linalg.cholesky(K+np.eye(self.N)*self.stab);     self.L = L
 
         alpha = np.linalg.solve(L.T,np.linalg.solve(L,self.y))
         LML   = -0.5 * np.matmul(self.y.T,alpha)  - np.sum(np.log(np.diag(L))) - 0.5 * np.log(2.*np.pi) * self.N
@@ -74,8 +73,7 @@ class GPR:
     # Optimize the hyperparamters
     def optimize(self,restart=None):
         if restart is None:
-            res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
-                            jac=True, method='L-BFGS-B',callback=self.likelihood)
+            res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound, jac=True, method='L-BFGS-B',callback=self.likelihood)
             self.params = res.x
             print("GP NLML: "+str(self.NLML))
         else:
@@ -83,8 +81,7 @@ class GPR:
             obj     = self.LML
             while (counter <= restart):
                 self.params = np.random.rand(self.params.size) * random.randint(0,3)
-                res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
-                                jac=True, method='L-BFGS-B',callback=self.likelihood)
+                res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound, jac=True, method='L-BFGS-B',callback=self.likelihood)
                 self.params = res.x
                 counter += 1
                 if res.fun < -self.LML:
@@ -109,16 +106,15 @@ class GPR:
     def plot(self,name,plot_std=False):
         if self.X.shape[1] > 1:
             raise Exception('Dimension of X should be 1 for this method...')
+
         x = np.linspace(np.min(self.X),np.max(self.X),100).reshape(-1,1)
         self.optimize(restart=10)
         self.likelihood(self.params)
         mean,std = self.inference(x,return_std=True)
         plt.plot(x,mean,"--",label='GPR-'+str(name), color='deepskyblue')
         if plot_std is True:
-            plt.fill_between(x.ravel(),mean.ravel() + 2 * std,mean.ravel() - 2 * std,
-                                        alpha=0.2,color='deepskyblue');
-            plt.fill_between(x.ravel(),mean.ravel() + 1 * std,mean.ravel() - 1 * std,
-                                        alpha=0.3,color='deepskyblue');
+            plt.fill_between(x.ravel(),mean.ravel() + 2. * std,mean.ravel() - 2. * std, alpha=0.2,color='deepskyblue');
+            plt.fill_between(x.ravel(),mean.ravel() + 1. * std,mean.ravel() - 1. * std, alpha=0.3,color='deepskyblue');
             plt.xlabel('$x$')
         plt.ylabel('$y$')
         plt.legend()
@@ -158,7 +154,7 @@ class coGPR():
         self.yc           = yc
         self.y            = np.vstack((yc,ye))
         self.stab         = 1e-6
-        self.bound       = ()
+        self.bound        = ()
         self.params       = self.hyperparams()
         self.LML          = self.likelihood(self.params)
 
@@ -170,21 +166,22 @@ class coGPR():
         for i in range(0,self.dim+1):
             self.bound += ((1e-6,None),)
         if self.noise_c is not None and self.noise_fix_c is False:
-            sigma_n_c = np.array([self.noise_c])
-            hyper_c      = np.concatenate([hyper_c,sigma_n_c])
-            self.bound += ((1e-6,None),)
+            sigma_n_c   = np.array([self.noise_c])
+            hyper_c     = np.concatenate([hyper_c,sigma_n_c])
+            self.bound  += ((1e-6,None),)
         # Expensive hyperparameters
         hyper_e = np.ones(self.dim+1)
         for i in range(0,self.dim+1):
             self.bound += ((1e-6,None),)
         self.id_theta_e = np.arange(hyper_c.shape[0],hyper_c.shape[0] + hyper_e.shape[0])
         if self.noise_e is not None and self.noise_fix_e is False:
-            sigma_n_e = np.array([self.noise_e])
-            hyper_e   = np.concatenate([hyper_e,sigma_n_e])
-            self.bound += ((1e-6,None),)
+            sigma_n_e   = np.array([self.noise_e])
+            hyper_e     = np.concatenate([hyper_e,sigma_n_e])
+            self.bound  += ((1e-6,None),)
         # Difference hyperparameters
-        rho = np.array([1.])
-        self.bound      += ((None,None),)
+        rho         = np.array([1.])
+        self.bound  += ((None,None),)
+
         hyper = np.concatenate([hyper_c,hyper_e,rho])
         return hyper
 
@@ -225,29 +222,29 @@ class coGPR():
 
         K = np.vstack((np.hstack((K_cc,K_ce)),np.hstack((K_ce.T,K_ee)))); self.K = K;
 
-        L = np.linalg.cholesky(K+np.eye(self.N)*self.stab); self.L = L;
+        L = np.linalg.cholesky(K+np.eye(self.N)*self.stab);               self.L = L;
 
-        alpha = np.linalg.solve(L.T,np.linalg.solve(L,self.y));self.alpha = alpha
-        LML   = -0.5 * np.matmul(self.y.T,alpha)  - np.sum(np.log(np.diag(L))) - 0.5 * np.log(2.*np.pi) * self.N
-        self.NLML = -LML
+        alpha = np.linalg.solve(L.T,np.linalg.solve(L,self.y));           self.alpha = alpha
+
+        LML   = -0.5 * np.matmul(self.y.T,alpha)  - np.sum(np.log(np.diag(L))) - 0.5 * np.log(2.*np.pi) * self.N; self.NLML = -LML
+
         return -LML
     # Optimizing hyperparameters
     def optimize(self,restart=None):
         if restart is None:
-            res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound, jac=True, method='L-BFGS-B',callback=self.likelihood)
+            res         = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound, jac=True, method='L-BFGS-B',callback=self.likelihood)
             self.params = res.x
         else:
             counter = 0
             obj     = self.LML
             while (counter <= restart):
-                self.params = np.random.rand(self.params.size)
+                self.params     = np.random.rand(self.params.size)
                 self.params[-1] = 1
-                res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
-                                jac=True, method='L-BFGS-B',callback=self.likelihood)
+                res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound, jac=True, method='L-BFGS-B',callback=self.likelihood)
                 self.params = res.x
-                counter += 1
+                counter     += 1
                 if res.fun < -self.LML:
-                    obj = res.fun
+                    obj         = res.fun
                     self.params = res.x
     # Predictions
     def inference(self, x, return_std=False):
@@ -269,13 +266,14 @@ class coGPR():
     def plot(self,name,plot_std=False):
         if self.Xe.shape[1] > 1:
             raise Exception('Dimension of Xe and Xc should be 1 for this method...')
+
         x = np.linspace(np.min(self.Xe),np.max(self.Xe),100).reshape(-1,1)
         self.optimize(restart=9);
         mean,std = self.inference(x,return_std=True)
         plt.plot(x,mean,":",label='coGPR-'+str(name), color='lime')
         if plot_std is True:
-            plt.fill_between(x.ravel(),mean.ravel() + 2 * std,mean.ravel() - 2 * std, alpha=0.2,color='lime')
-            plt.fill_between(x.ravel(),mean.ravel() + 1 * std,mean.ravel() - 1 * std, alpha=0.3,color='lime')
+            plt.fill_between(x.ravel(),mean.ravel() + 2. * std,mean.ravel() - 2. * std, alpha=0.2,color='lime')
+            plt.fill_between(x.ravel(),mean.ravel() + 1. * std,mean.ravel() - 1. * std, alpha=0.3,color='lime')
         plt.xlabel('$x$')
         plt.ylabel('$y$')
         plt.legend()
@@ -339,17 +337,17 @@ class multiGPR():
 
     # Lower fidelity regression
     def lowreg(self):
-        self.model_low      = GPR(self.Xc,self.yc,self.noise_c,self.noise_fix_c)
+        self.model_low  = GPR(self.Xc,self.yc,self.noise_c,self.noise_fix_c)
 
         self.model_low.optimize()
 
-        self.mc,self.covc   = self.model_low.inference(self.Xe)
+        self.mc,self.covc = self.model_low.inference(self.Xe)
         print self.model_low.params
 
     # RBF Covariance Matrix
     def RBF(self,hyper,xi,xj=None):
         if xj is None:
-            xj = xi
+            xj  = xi
         sigma_f     = hyper[0]
         lengthscale = hyper[1:]
         r           = np.expand_dims(xi*lengthscale,1) -  np.expand_dims(xj*lengthscale,0)
@@ -371,15 +369,7 @@ class multiGPR():
 
         alpha  = np.linalg.solve(L.T,np.linalg.solve(L,(self.ye-rho*self.mc))); self.alpha = alpha
 
-        NLML   = 0.5*self.Ne*np.log(hyper[0]) + np.sum(np.log(np.diag(L))) + 0.5*np.matmul((self.ye-rho*self.mc).T,alpha)/hyper[0]
-        #print "y",self.ye
-        #print "rho",hyper[-1]
-        #print "sig",hyper[0]
-        #print "trace", np.sum(np.log(np.diag(L)))
-        #print "lowy",self.mc
-        #print "alpha", alpha
-        #print "term",0.5*self.Ne*np.log(hyper[0])
-        self.NLML = NLML
+        NLML   = 0.5*self.Ne*np.log(hyper[0]) + np.sum(np.log(np.diag(L))) + 0.5*np.matmul((self.ye-rho*self.mc).T,alpha)/hyper[0]; self.NLML = NLML
         return NLML
     # Optimize hyperparameters
     def optimize(self,restart=None):
@@ -388,14 +378,14 @@ class multiGPR():
             self.params = res.x
         else:
             counter = 0
-            obj     = self.LML
+            obj     = self.NLML
             while (counter <= restart):
                 self.params = np.random.rand(self.params.size)
                 res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
                                 jac=True, method='L-BFGS-B',callback=self.likelihood)
                 self.params = res.x
                 counter += 1
-                if res.fun < -self.LML:
+                if res.fun < self.NLML:
                     obj = res.fun
                     self.params = res.x
             print("multiGP NLML: "+str(self.NLML))
@@ -424,8 +414,8 @@ class multiGPR():
         mean,std = self.inference(x,return_std=True)
         plt.plot(x,mean,":",label='multiGPR-'+str(name), color='lime')
         if plot_std is True:
-            plt.fill_between(x.ravel(),mean.ravel() + 2 * std,mean.ravel() - 2 * std, alpha=0.2,color='lime')
-            plt.fill_between(x.ravel(),mean.ravel() + 1 * std,mean.ravel() - 1 * std, alpha=0.3,color='lime')
+            plt.fill_between(x.ravel(),mean.ravel() + 2. * std,mean.ravel() - 2. * std, alpha=0.2,color='lime')
+            plt.fill_between(x.ravel(),mean.ravel() + 1. * std,mean.ravel() - 1. * std, alpha=0.3,color='lime')
         plt.xlabel('$x$')
         plt.ylabel('$y$')
 ################################################################################
