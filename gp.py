@@ -51,8 +51,7 @@ class GPR:
             xj = xi
         sigma_f     = np.array(hyper[0])
         lengthscale = np.array(hyper[1:])
-        r           = np.expand_dims(xi*lengthscale,1) - \
-                      np.expand_dims(xj*lengthscale,0)
+        r           = np.expand_dims(xi*lengthscale,1) - np.expand_dims(xj*lengthscale,0)
         return sigma_f * np.exp(-0.5 * np.sum(r**2,axis=2))
 
     # Objective function to be minimized
@@ -64,12 +63,12 @@ class GPR:
         theta   = hyper[self.id_theta];self.theta = theta
 
         K = self.RBF(theta,self.X)+np.eye(self.N)*sigma_n
+        self.K = K
         L = np.linalg.cholesky(K+np.eye(self.N)*self.stab);self.L = L
 
         alpha = np.linalg.solve(L.T,np.linalg.solve(L,self.y))
-        LML   = -0.5 * np.matmul(self.y.T,alpha)  - np.sum(np.log(np.diag(L))) - \
-                0.5 * np.log(2.*np.pi) * self.N
-        self.LML = LML
+        LML   = -0.5 * np.matmul(self.y.T,alpha)  - np.sum(np.log(np.diag(L))) - 0.5 * np.log(2.*np.pi) * self.N
+        self.NLML = -LML
         return -LML
 
     # Optimize the hyperparamters
@@ -78,6 +77,7 @@ class GPR:
             res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
                             jac=True, method='L-BFGS-B',callback=self.likelihood)
             self.params = res.x
+            print("GP NLML: "+str(self.NLML))
         else:
             counter = 0
             obj     = self.LML
@@ -90,7 +90,7 @@ class GPR:
                 if res.fun < -self.LML:
                     obj = res.fun
                     self.params = res.x
-
+            print("GP NLML: "+str(self.NLML))
     # Making predictions
     def inference(self,x,return_std=False):
         k_s   = self.RBF(self.theta,x,self.X)
@@ -103,13 +103,13 @@ class GPR:
         if return_std is False:
             return mean,var
         else:
-            return mean,std
+            return mean,std,
 
     # Plotting tool for predictions
     def plot(self,name,plot_std=False):
         if self.X.shape[1] > 1:
             raise Exception('Dimension of X should be 1 for this method...')
-        x = np.linspace(np.min(self.X)-2.,np.max(self.X)+2,100).reshape(-1,1)
+        x = np.linspace(np.min(self.X),np.max(self.X),100).reshape(-1,1)
         self.optimize(restart=10)
         self.likelihood(self.params)
         mean,std = self.inference(x,return_std=True)
@@ -177,8 +177,7 @@ class coGPR():
         hyper_e = np.ones(self.dim+1)
         for i in range(0,self.dim+1):
             self.bound += ((1e-6,None),)
-        self.id_theta_e = np.arange(hyper_c.shape[0],hyper_c.shape[0]+\
-                                                               hyper_e.shape[0])
+        self.id_theta_e = np.arange(hyper_c.shape[0],hyper_c.shape[0] + hyper_e.shape[0])
         if self.noise_e is not None and self.noise_fix_e is False:
             sigma_n_e = np.array([self.noise_e])
             hyper_e   = np.concatenate([hyper_e,sigma_n_e])
@@ -195,8 +194,7 @@ class coGPR():
             xj = xi
         sigma_f     = hyper[0]
         lengthscale = hyper[1:]
-        r           = np.expand_dims(xi*lengthscale,1) - \
-                      np.expand_dims(xj*lengthscale,0)
+        r           = np.expand_dims(xi/lengthscale,1) - np.expand_dims(xjlengthscale,0)
         return sigma_f * np.exp(-0.5 * np.sum(r**2,axis=2))
 
     # Log Marginal likelihood
@@ -215,33 +213,28 @@ class coGPR():
             sigma_n_c    = 1e-6
             sigma_n_e    = 1e-6
 
-        rho = hyper[-1]; self.rho = rho
+        rho     = hyper[-1]; self.rho = rho
         theta_c = hyper[self.id_theta_c]; self.theta_c = theta_c
         theta_e = hyper[self.id_theta_e]; self.theta_e = theta_e
-        #hyper = 1.
-        K_cc = self.RBF(theta_c,self.Xc) + np.eye(self.Nc)*sigma_n_c
-        K_ce = rho * self.RBF(theta_c,self.Xc,self.Xe) +\
-        np.vstack((np.zeros(((self.Nc-self.Ne),self.Ne)),np.eye(self.Ne)))*\
-        sigma_n_c
 
+        K_cc = self.RBF(theta_c,self.Xc) + np.eye(self.Nc)*sigma_n_c
+        K_ce = rho * self.RBF(theta_c,self.Xc,self.Xe) + \
+        np.vstack((np.zeros(((self.Nc-self.Ne),self.Ne)),np.eye(self.Ne))) * sigma_n_c
         K_ee = rho**2 * self.RBF(theta_c,self.Xe) +\
-        np.eye(self.Ne)*sigma_n_c + \
-        self.RBF(theta_e,self.Xe) + np.eye(self.Ne)*sigma_n_e
+        np.eye(self.Ne)*sigma_n_c + self.RBF(theta_e,self.Xe) + np.eye(self.Ne) * sigma_n_e
 
         K = np.vstack((np.hstack((K_cc,K_ce)),np.hstack((K_ce.T,K_ee))))
 
         L = np.linalg.cholesky(K+np.eye(self.N)*self.stab);self.L = L
 
         alpha = np.linalg.solve(L.T,np.linalg.solve(L,self.y));self.alpha = alpha
-        LML   = -0.5 * np.matmul(self.y.T,alpha)  - np.sum(np.log(np.diag(L))) - \
-                0.5 * np.log(2.*np.pi) * self.N
-        self.LML = LML
+        LML   = -0.5 * np.matmul(self.y.T,alpha)  - np.sum(np.log(np.diag(L))) - 0.5 * np.log(2.*np.pi) * self.N
+        self.NLML = -LML
         return -LML
     # Optimizing hyperparameters
     def optimize(self,restart=None):
         if restart is None:
-            res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
-                            jac=True, method='L-BFGS-B',callback=self.likelihood)
+            res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound, jac=True, method='L-BFGS-B',callback=self.likelihood)
             self.params = res.x
         else:
             counter = 0
@@ -256,18 +249,16 @@ class coGPR():
                 if res.fun < -self.LML:
                     obj = res.fun
                     self.params = res.x
-
     # Predictions
     def inference(self, x, return_std=False):
         self.likelihood(self.params)
         c_c = self.rho * self.RBF(self.theta_c,self.Xc,x)
-        c_e = self.rho**2 * self.RBF(self.theta_c,self.Xe,x) + \
-              self.RBF(self.theta_e,self.Xe,x)
+        c_e = self.rho**2 * self.RBF(self.theta_c,self.Xe,x) + self.RBF(self.theta_e,self.Xe,x)
         c = np.vstack((c_c,c_e))
+
         mean = np.matmul(c.T,self.alpha)
         v    = np.linalg.solve(self.L.T,np.linalg.solve(self.L,c))
-        var  = self.rho**2 * self.RBF(self.theta_c,x) + \
-        self.RBF(self.theta_e,x) - np.matmul(c.T,v)
+        var  = self.rho**2 * self.RBF(self.theta_c,x) + self.RBF(self.theta_e,x) - np.matmul(c.T,v)
         std  = np.sqrt(np.diag(var))
         if return_std is False:
             return mean,var
@@ -283,10 +274,8 @@ class coGPR():
         mean,std = self.inference(x,return_std=True)
         plt.plot(x,mean,":",label='coGPR-'+str(name), color='lime')
         if plot_std is True:
-            plt.fill_between(x.ravel(),mean.ravel() + 2 * std,mean.ravel() - 2 * std,
-                                        alpha=0.2,color='lime')
-            plt.fill_between(x.ravel(),mean.ravel() + 1 * std,mean.ravel() - 1 * std,
-                                        alpha=0.3,color='lime')
+            plt.fill_between(x.ravel(),mean.ravel() + 2 * std,mean.ravel() - 2 * std, alpha=0.2,color='lime')
+            plt.fill_between(x.ravel(),mean.ravel() + 1 * std,mean.ravel() - 1 * std, alpha=0.3,color='lime')
         plt.xlabel('$x$')
         plt.ylabel('$y$')
         plt.legend()
@@ -333,26 +322,29 @@ class multiGPR():
 
     # Initialize hyperparameters
     def hyperparams(self):
-        hyper_e = np.ones(self.dim+1)+0.1*np.ones(self.dim+1)
+        hyper_e         = np.ones(self.dim+1)+0.1*np.ones(self.dim+1)
         self.id_theta_e = np.arange(hyper_e.shape[0])
         for i in range(0,self.dim+1):
             self.bound  += ((1e-6,None),)
 
         if self.noise_e is not None and self.noise_fix_e is False:
-            sigma_n_e = np.array([self.noise_e])
-            hyper_e   = np.concatenate([hyper_e,logsigma_n_e])
+            sigma_n_e   = np.array([self.noise_e])
+            hyper_e     = np.concatenate([hyper_e,np.log(sigma_n_e)])
             self.bound  += ((1e-6,None),)
 
         rho = np.array([1.])
-        self.bound  += ((None,None),)
+        self.bound      += ((None,None),)
         hyper = np.concatenate([hyper_e,rho])
         return hyper
 
     # Lower fidelity regression
     def lowreg(self):
-        self.model_low = GPR(self.Xc,self.yc,self.noise_c,self.noise_fix_c)
+        self.model_low      = GPR(self.Xc,self.yc,self.noise_c,self.noise_fix_c)
+
         self.model_low.optimize()
-        self.mc,self.covc = self.model_low.inference(self.Xe)
+
+        self.mc,self.covc   = self.model_low.inference(self.Xe)
+        print self.model_low.params
 
     # RBF Covariance Matrix
     def RBF(self,hyper,xi,xj=None):
@@ -360,8 +352,7 @@ class multiGPR():
             xj = xi
         sigma_f     = hyper[0]
         lengthscale = hyper[1:]
-        r           = np.expand_dims(xi*lengthscale,1) - \
-                      np.expand_dims(xj*lengthscale,0)
+        r           = np.expand_dims(xi*lengthscale,1) -  np.expand_dims(xj*lengthscale,0)
         return sigma_f * np.exp(-0.5 * np.sum(r**2,axis=2))
 
     # log marginal likelihood
@@ -372,25 +363,28 @@ class multiGPR():
         else:
             sigma_n_e = 0.
 
-        rho = hyper[-1]; self.rho = rho
-        theta_e = hyper[self.id_theta_e]; self.theta_e = theta_e
+        rho     = hyper[-1];                    self.rho = rho
+        theta_e = hyper[self.id_theta_e];       self.theta_e = theta_e
 
-        K = self.RBF(theta_e,self.Xe) + np.eye(self.Ne) * self.stab
+        K = self.RBF(theta_e,self.Xe) + np.eye(self.Ne) * (self.stab);  self.K = K
+        L = np.linalg.cholesky(K+np.eye(self.Ne)*self.stab);            self.L = L
 
-        L = np.linalg.cholesky(K+np.eye(self.Ne)*self.stab);self.L = L
+        alpha  = np.linalg.solve(L.T,np.linalg.solve(L,(self.ye-rho*self.mc))); self.alpha = alpha
 
-        alpha = np.linalg.solve(L.T,np.linalg.solve(L,(self.ye-rho*self.mc)))
-
-        self.alpha = alpha
-
-        NLML   = 0.5*self.Ne*np.log(hyper[0]) + 0.5*np.sum(np.log(np.diag(L))) +\
-                0.5*np.matmul((self.ye-rho*self.mc).T,alpha)/hyper[0]
+        NLML   = 0.5*self.Ne*np.log(hyper[0]) + np.sum(np.log(np.diag(L))) + 0.5*np.matmul((self.ye-rho*self.mc).T,alpha)/hyper[0]
+        #print "y",self.ye
+        #print "rho",hyper[-1]
+        #print "sig",hyper[0]
+        #print "trace", np.sum(np.log(np.diag(L)))
+        #print "lowy",self.mc
+        #print "alpha", alpha
+        #print "term",0.5*self.Ne*np.log(hyper[0])
+        self.NLML = NLML
         return NLML
     # Optimize hyperparameters
     def optimize(self,restart=None):
         if restart is None:
-            res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound,
-                            jac=True, method='L-BFGS-B',callback=self.likelihood)
+            res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound, jac=True, method='L-BFGS-B',callback=self.likelihood)
             self.params = res.x
         else:
             counter = 0
@@ -404,18 +398,18 @@ class multiGPR():
                 if res.fun < -self.LML:
                     obj = res.fun
                     self.params = res.x
-
+            print("multiGP NLML: "+str(self.NLML))
     # Predictions
     def inference(self, x, return_std=False):
         self.likelihood(self.params)
         m_low,cov_low   = self.model_low.inference(x)
-        k_s   = self.RBF(self.theta_e,x,self.Xe)
-        k_ss  = self.RBF(self.theta_e,x)
-        alpha = np.linalg.solve(self.L.T,np.linalg.solve(self.L,(self.ye-self.rho*self.mc)))
-        mean    = self.rho*m_low + np.matmul(k_s,alpha)
-        v     = np.linalg.solve(self.L,k_s.T)
-        var  = self.rho**2 * cov_low + k_ss - np.dot(v.T,v)
-        std  = np.sqrt(np.diag(var))
+        k_s             = self.RBF(self.theta_e,x,self.Xe)
+        k_ss            = self.RBF(self.theta_e,x)
+        alpha           = np.linalg.solve(self.L.T,np.linalg.solve(self.L,(self.ye-self.rho*self.mc)))
+        mean            = self.rho*m_low + np.matmul(k_s,alpha)
+        v               = np.linalg.solve(self.L,k_s.T)
+        var             = self.rho**2 * cov_low + k_ss - np.dot(v.T,v)
+        std             = np.sqrt(np.diag(var))
         if return_std is False:
             return mean,var
         else:
@@ -430,10 +424,8 @@ class multiGPR():
         mean,std = self.inference(x,return_std=True)
         plt.plot(x,mean,":",label='multiGPR-'+str(name), color='lime')
         if plot_std is True:
-            plt.fill_between(x.ravel(),mean.ravel() + 2 * std,mean.ravel() - 2 * std,
-                                        alpha=0.2,color='lime')
-            plt.fill_between(x.ravel(),mean.ravel() + 1 * std,mean.ravel() - 1 * std,
-                                        alpha=0.3,color='lime')
+            plt.fill_between(x.ravel(),mean.ravel() + 2 * std,mean.ravel() - 2 * std, alpha=0.2,color='lime')
+            plt.fill_between(x.ravel(),mean.ravel() + 1 * std,mean.ravel() - 1 * std, alpha=0.3,color='lime')
         plt.xlabel('$x$')
         plt.ylabel('$y$')
 ################################################################################

@@ -34,8 +34,11 @@ reg1 = GPR(Xe,fe(Xe),noise_var=None,noise_fix=False);
 reg1.plot(name='Expensive',plot_std=False)
 # Regular GPR with just Expnesive sample
 reg2 = multiGPR(Xc,Xe,fc(Xc),fe(Xe));
-reg2.plot(name='Expensive',plot_std=False)
+reg2.plot(name='Expensive',plot_std=True)
+print reg2.params
 m2,std2 = reg2.inference(x,return_std=True)
+#print reg2.params
+#print reg2.mc
 plt.legend()
 # Error Calculation
 print('multiGPR ||Error|| = {}'.format(np.linalg.norm(std2)))
@@ -44,4 +47,5 @@ plt.plot(x,std2**2,color='k',label='variance')
 plt.xlabel('$x$')
 plt.ylabel('$variance$')
 plt.legend()
+#print(reg2.K)
 plt.show()
