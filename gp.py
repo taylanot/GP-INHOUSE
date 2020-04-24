@@ -194,7 +194,7 @@ class coGPR():
             xj = xi
         sigma_f     = hyper[0]
         lengthscale = hyper[1:]
-        r           = np.expand_dims(xi/lengthscale,1) - np.expand_dims(xjlengthscale,0)
+        r           = np.expand_dims(xi*lengthscale,1) - np.expand_dims(xj*lengthscale,0)
         return sigma_f * np.exp(-0.5 * np.sum(r**2,axis=2))
 
     # Log Marginal likelihood
@@ -223,9 +223,9 @@ class coGPR():
         K_ee = rho**2 * self.RBF(theta_c,self.Xe) +\
         np.eye(self.Ne)*sigma_n_c + self.RBF(theta_e,self.Xe) + np.eye(self.Ne) * sigma_n_e
 
-        K = np.vstack((np.hstack((K_cc,K_ce)),np.hstack((K_ce.T,K_ee))))
+        K = np.vstack((np.hstack((K_cc,K_ce)),np.hstack((K_ce.T,K_ee)))); self.K = K;
 
-        L = np.linalg.cholesky(K+np.eye(self.N)*self.stab);self.L = L
+        L = np.linalg.cholesky(K+np.eye(self.N)*self.stab); self.L = L;
 
         alpha = np.linalg.solve(L.T,np.linalg.solve(L,self.y));self.alpha = alpha
         LML   = -0.5 * np.matmul(self.y.T,alpha)  - np.sum(np.log(np.diag(L))) - 0.5 * np.log(2.*np.pi) * self.N
