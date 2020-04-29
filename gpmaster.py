@@ -119,165 +119,6 @@ class GPR:
         plt.ylabel('$y$')
         plt.legend()
 ################################################################################
-# Two Fidelity Gaussian Process Regression, Forrester et al./2007
-################################################################################
-class coGPR():
-    """
-    Gaussian Process Regressor with two fidelities
-    Xc               : nxdimension array of cheap data
-    yc               : nx1 array of targets of cheap data
-    Xe               : nxdimension array of expensive data
-    ye               : nx1 array of targets of expensive data
-    noise_var_c     : noise variance of the data cheap data
-    noise_fix_c     : noise variance is fixed for cheap data
-    noise_var_e     : noise variance of the data cheap data
-    noise_fix_e     : noise variance is fixed for cheap data
-    stab            : added to cov.mat. for stability
-    bound           : bounds for hyperparameter optimization
-    params          : array with hyperparameters
-    LML             : log marginal likelihood
-
-    """
-    def __init__(self, Xc, Xe, yc, ye, noise_var_c=None, noise_fix_c=False,
-                    noise_var_e=None, noise_fix_e=False):
-        self.dim          = Xc.shape[1]
-        self.Nc           = Xc.shape[0]
-        self.Ne           = Xe.shape[0]
-        self.N            = self.Ne + self.Nc
-        self.noise_c      = noise_var_c
-        self.noise_fix_c  = noise_fix_c
-        self.noise_e      = noise_var_e
-        self.noise_fix_e  = noise_fix_e
-        self.Xe           = Xe
-        self.ye           = ye
-        self.Xc           = Xc
-        self.yc           = yc
-        self.y            = np.vstack((yc,ye))
-        self.stab         = 1e-6
-        self.bound        = ()
-        self.params       = self.hyperparams()
-        self.LML          = self.likelihood(self.params)
-
-    # Initialize hyperparameters
-    def hyperparams(self):
-        # Cheap hyperparameters
-        hyper_c = np.ones(self.dim+1)
-        self.id_theta_c = np.arange(hyper_c.shape[0])
-        for i in range(0,self.dim+1):
-            self.bound += ((1e-6,None),)
-        if self.noise_c is not None and self.noise_fix_c is False:
-            sigma_n_c   = np.array([self.noise_c])
-            hyper_c     = np.concatenate([hyper_c,sigma_n_c])
-            self.bound  += ((1e-6,None),)
-        # Expensive hyperparameters
-        hyper_e = np.ones(self.dim+1)
-        for i in range(0,self.dim+1):
-            self.bound += ((1e-6,None),)
-        self.id_theta_e = np.arange(hyper_c.shape[0],hyper_c.shape[0] + hyper_e.shape[0])
-        if self.noise_e is not None and self.noise_fix_e is False:
-            sigma_n_e   = np.array([self.noise_e])
-            hyper_e     = np.concatenate([hyper_e,sigma_n_e])
-            self.bound  += ((1e-6,None),)
-        # Difference hyperparameters
-        rho         = np.array([1.])
-        self.bound  += ((None,None),)
-
-        hyper = np.concatenate([hyper_c,hyper_e,rho])
-        return hyper
-
-    # RBF Covariance Matrix
-    def RBF(self,hyper,xi,xj=None):
-        if xj is None:
-            xj = xi
-        sigma_f     = hyper[0]
-        lengthscale = hyper[1:]
-        r           = np.expand_dims(xi*lengthscale,1) - np.expand_dims(xj*lengthscale,0)
-        return sigma_f * np.exp(-0.5 * np.sum(r**2,axis=2))
-
-    # Log Marginal likelihood
-    def likelihood(self, hyper):
-        if (self.noise_c is not None and self.noise_fix_c is False):
-            sigma_n_c = hyper[2]
-            if (self.noise_e is not None and self.noise_fix_e is False):
-                sigma_n_e = hyper[5]
-            else:
-                sigma_n_e = 0.
-        elif (self.noise_c is None and self.noise_fix_c is False) and \
-             (self.noise_e is not None and self.noise_fix_e is False):
-                sigma_n_e = hyper[4]
-                sigma_n_c    = 0.
-        else:
-            sigma_n_c    = 1e-6
-            sigma_n_e    = 1e-6
-
-        rho     = hyper[-1]; self.rho = rho
-        theta_c = hyper[self.id_theta_c]; self.theta_c = theta_c
-        theta_e = hyper[self.id_theta_e]; self.theta_e = theta_e
-
-        K_cc = self.RBF(theta_c,self.Xc) + np.eye(self.Nc)*sigma_n_c
-        K_ce = rho * self.RBF(theta_c,self.Xc,self.Xe) + \
-        np.vstack((np.zeros(((self.Nc-self.Ne),self.Ne)),np.eye(self.Ne))) * sigma_n_c
-        K_ee = rho**2 * self.RBF(theta_c,self.Xe) +\
-        np.eye(self.Ne)*sigma_n_c + self.RBF(theta_e,self.Xe) + np.eye(self.Ne) * sigma_n_e
-
-        K = np.vstack((np.hstack((K_cc,K_ce)),np.hstack((K_ce.T,K_ee)))); self.K = K;
-
-        L = np.linalg.cholesky(K+np.eye(self.N)*self.stab);               self.L = L;
-
-        alpha = np.linalg.solve(L.T,np.linalg.solve(L,self.y));           self.alpha = alpha
-
-        LML   = -0.5 * np.matmul(self.y.T,alpha)  - np.sum(np.log(np.diag(L))) - 0.5 * np.log(2.*np.pi) * self.N; self.NLML = -LML
-
-        return -LML
-    # Optimizing hyperparameters
-    def optimize(self,restart=None):
-        if restart is None:
-            res         = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound, jac=True, method='L-BFGS-B',callback=self.likelihood)
-            self.params = res.x
-        else:
-            counter = 0
-            obj     = self.LML
-            while (counter <= restart):
-                self.params     = np.random.rand(self.params.size)
-                self.params[-1] = 1
-                res = minimize(value_and_grad(self.likelihood), self.params, bounds=self.bound, jac=True, method='L-BFGS-B',callback=self.likelihood)
-                self.params = res.x
-                counter     += 1
-                if res.fun < -self.LML:
-                    obj         = res.fun
-                    self.params = res.x
-    # Predictions
-    def inference(self, x, return_std=False):
-        self.likelihood(self.params)
-        c_c = self.rho * self.RBF(self.theta_c,self.Xc,x)
-        c_e = self.rho**2 * self.RBF(self.theta_c,self.Xe,x) + self.RBF(self.theta_e,self.Xe,x)
-        c = np.vstack((c_c,c_e))
-
-        mean = np.matmul(c.T,self.alpha)
-        v    = np.linalg.solve(self.L.T,np.linalg.solve(self.L,c))
-        var  = self.rho**2 * self.RBF(self.theta_c,x) + self.RBF(self.theta_e,x) - np.matmul(c.T,v)
-        std  = np.sqrt(np.diag(var))
-        if return_std is False:
-            return mean,var
-        else:
-            return mean,std
-
-    # Plotting tool for predictions
-    def plot(self,name,plot_std=False):
-        if self.Xe.shape[1] > 1:
-            raise Exception('Dimension of Xe and Xc should be 1 for this method...')
-
-        x = np.linspace(np.min(self.Xe),np.max(self.Xe),100).reshape(-1,1)
-        self.optimize(restart=9);
-        mean,std = self.inference(x,return_std=True)
-        plt.plot(x,mean,":",label='coGPR-'+str(name), color='lime')
-        if plot_std is True:
-            plt.fill_between(x.ravel(),mean.ravel() + 2. * std,mean.ravel() - 2. * std, alpha=0.2,color='lime')
-            plt.fill_between(x.ravel(),mean.ravel() + 1. * std,mean.ravel() - 1. * std, alpha=0.3,color='lime')
-        plt.xlabel('$x$')
-        plt.ylabel('$y$')
-        plt.legend()
-################################################################################
 # Two Fidelity Gaussian Process Regression, Perdikaris et al./2016
 ################################################################################
 class multiGPR():
@@ -329,10 +170,10 @@ class multiGPR():
             sigma_n_e   = np.array([self.noise_e])
             hyper_e     = np.concatenate([hyper_e,np.log(sigma_n_e)])
             self.bound  += ((1e-6,None),)
-
-        rho = np.array([1.])
-        self.bound      += ((None,None),)
-        hyper = np.concatenate([hyper_e,rho])
+        #rho = np.array([1.])
+        #self.bound      += ((None,None),)
+        #hyper = np.concatenate([hyper_e,rho])
+        hyper = hyper_e
         return hyper
 
     # Lower fidelity regression
@@ -361,15 +202,18 @@ class multiGPR():
         else:
             sigma_n_e = 0.
 
-        rho     = hyper[-1];                    self.rho = rho
         theta_e = hyper[self.id_theta_e];       self.theta_e = theta_e
 
         K = self.RBF(theta_e,self.Xe) + np.eye(self.Ne) * (sigma_n_e);   self.K = K
         L = np.linalg.cholesky(K+np.eye(self.Ne)*self.stab);                self.L = L
 
+        alpha1_ = np.linalg.solve(self.L.T,np.linalg.solve(self.L,self.mc))
+        alpha2_ = np.linalg.solve(self.L.T,np.linalg.solve(self.L,self.ye))
+        rho     = np.matmul(self.mc.T,alpha2_) / np.matmul(self.mc.T,alpha1_); self.rho = rho;
+
         alpha  = np.linalg.solve(L.T,np.linalg.solve(L,(self.ye-rho*self.mc))); self.alpha = alpha
 
-        NLML = np.sum(np.log(np.diag(L))) + 0.5*np.matmul((self.ye-rho*self.mc).T,alpha) + 0.5 * np.log(2.*np.pi) * self.Ne ; self.NLML = NLML
+        NLML   = np.sum(np.log(np.diag(L))) + 0.5*np.matmul((self.ye-rho*self.mc).T,alpha) + 0.5 * np.log(2.*np.pi) * self.Ne ; self.NLML = NLML
         return NLML
     # Optimize hyperparameters
     def optimize(self,restart=None):
@@ -404,6 +248,10 @@ class multiGPR():
             return mean,var
         else:
             return mean,std
+    def getParams(self):
+        print "rho:  ", self.rho
+        print "sig_n:", self.params[0]
+        print "l:    ", 1/self.params[1]
 
     # Plotting tool for predictions
     def plot(self,name,plot_std=False):

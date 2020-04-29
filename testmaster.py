@@ -6,7 +6,7 @@
 # Import the necessary modules
 ################################################################################
 import sys;sys.dont_write_bytecode = True;
-from gp import *
+from gpmaster import *
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.rcParams['text.usetex'] = True
@@ -17,8 +17,8 @@ def fe(x):
     return (6.0*x-2.)**2*np.sin(12*x-4)
 # Cheap Function
 def fc(x):
-    A = 0.5; B=10; C=5
-    return A*fe(x) +B*(x-0.5)-C
+    A = 5; B=50; C=5
+    return A*fe(x) +B*(x-0.5)**2-C
 ################################################################################
 plt.figure(1)
 plt.subplot(121)
@@ -37,6 +37,7 @@ reg2 = multiGPR(Xc,Xe,fc(Xc),fe(Xe));
 reg2.plot(name='Expensive',plot_std=True)
 print reg2.params
 m2,std2 = reg2.inference(x,return_std=True)
+reg2.getParams()
 plt.legend()
 # Error Calculation
 print('multiGPR ||Error|| = {}'.format(np.linalg.norm(std2)))
