@@ -17,8 +17,8 @@ def fe(x):
     return (6.0*x-2.)**2*np.sin(12*x-4)
 # Cheap Function
 def fc(x):
-    A = 5; B=50; C=5
-    return A*fe(x) +B*(x-0.5)**2-C
+    A = 0.5; B=10; C=5
+    return A*fe(x) +B*(x-0.5)-C
 ################################################################################
 plt.figure(1)
 plt.subplot(121)

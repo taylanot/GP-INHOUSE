@@ -161,7 +161,7 @@ class multiGPR():
 
     # Initialize hyperparameters
     def hyperparams(self):
-        hyper_e         = np.ones(self.dim+1)+0.1*np.ones(self.dim+1)
+        hyper_e         = np.ones(self.dim+1)*0.0000001
         self.id_theta_e = np.arange(hyper_e.shape[0])
         for i in range(0,self.dim+1):
             self.bound  += ((1e-6,None),)
@@ -174,6 +174,7 @@ class multiGPR():
         #self.bound      += ((None,None),)
         #hyper = np.concatenate([hyper_e,rho])
         hyper = hyper_e
+        print(hyper)
         return hyper
 
     # Lower fidelity regression
@@ -204,7 +205,7 @@ class multiGPR():
 
         theta_e = hyper[self.id_theta_e];       self.theta_e = theta_e
 
-        K = self.RBF(theta_e,self.Xe) + np.eye(self.Ne) * (sigma_n_e);   self.K = K
+        K = self.RBF(theta_e,self.Xe) + np.eye(self.Ne) * (sigma_n_e);      self.K = K
         L = np.linalg.cholesky(K+np.eye(self.Ne)*self.stab);                self.L = L
 
         alpha1_ = np.linalg.solve(self.L.T,np.linalg.solve(self.L,self.mc))
@@ -212,7 +213,8 @@ class multiGPR():
         rho     = np.matmul(self.mc.T,alpha2_) / np.matmul(self.mc.T,alpha1_); self.rho = rho;
 
         alpha  = np.linalg.solve(L.T,np.linalg.solve(L,(self.ye-rho*self.mc))); self.alpha = alpha
-
+        sigma = 1./(self.Ne) * np.matmul((self.ye-rho*self.mc).T,alpha)
+        #print "sigma: ", sigma
         NLML   = np.sum(np.log(np.diag(L))) + 0.5*np.matmul((self.ye-rho*self.mc).T,alpha) + 0.5 * np.log(2.*np.pi) * self.Ne ; self.NLML = NLML
         return NLML
     # Optimize hyperparameters
@@ -252,6 +254,13 @@ class multiGPR():
         print "rho:  ", self.rho
         print "sig_n:", self.params[0]
         print "l:    ", 1/self.params[1]
+        theta_e = self.params[self.id_theta_e];       self.theta_e = theta_e
+        self.params[0] = 0
+        K = self.RBF(theta_e,self.Xe) + np.eye(self.Ne) * (0.);      self.K = K
+        L = np.linalg.cholesky(K+np.eye(self.Ne)*self.stab);                self.L = L
+        alpha  = np.linalg.solve(L.T,np.linalg.solve(L,(self.ye-self.rho*self.mc))); self.alpha = alpha
+        sigma = 1./(self.Ne-2) * np.matmul((self.ye-self.rho*self.mc).T,alpha)
+        print "sigma: ", sigma
 
     # Plotting tool for predictions
     def plot(self,name,plot_std=False):
