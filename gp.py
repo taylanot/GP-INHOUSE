@@ -330,9 +330,10 @@ class multiGPR():
             hyper_e     = np.concatenate([hyper_e,np.log(sigma_n_e)])
             self.bound  += ((1e-6,None),)
 
-        rho = np.array([1.])
-        self.bound      += ((None,None),)
-        hyper = np.concatenate([hyper_e,rho])
+        #rho = np.array([1.])
+        #self.bound      += ((None,None),)
+        #hyper = np.concatenate([hyper_e,rho])
+        hyper = hyper_e
         return hyper
 
     # Lower fidelity regression
@@ -361,15 +362,18 @@ class multiGPR():
         else:
             sigma_n_e = 0.
 
-        rho     = hyper[-1];                    self.rho = rho
         theta_e = hyper[self.id_theta_e];       self.theta_e = theta_e
 
-        K = self.RBF(theta_e,self.Xe) + np.eye(self.Ne) * (sigma_n_e);   self.K = K
+        K = self.RBF(theta_e,self.Xe) + np.eye(self.Ne) * (sigma_n_e);      self.K = K
         L = np.linalg.cholesky(K+np.eye(self.Ne)*self.stab);                self.L = L
+
+        alpha1_ = np.linalg.solve(self.L.T,np.linalg.solve(self.L,self.mc))
+        alpha2_ = np.linalg.solve(self.L.T,np.linalg.solve(self.L,self.ye))
+        rho     = np.matmul(self.mc.T,alpha2_) / np.matmul(self.mc.T,alpha1_); self.rho = rho;
 
         alpha  = np.linalg.solve(L.T,np.linalg.solve(L,(self.ye-rho*self.mc))); self.alpha = alpha
 
-        NLML = np.sum(np.log(np.diag(L))) + 0.5*np.matmul((self.ye-rho*self.mc).T,alpha) + 0.5 * np.log(2.*np.pi) * self.Ne ; self.NLML = NLML
+        NLML   = np.sum(np.log(np.diag(L))) + 0.5*np.matmul((self.ye-rho*self.mc).T,alpha) + 0.5 * np.log(2.*np.pi) * self.Ne ; self.NLML = NLML
         return NLML
     # Optimize hyperparameters
     def optimize(self,restart=None):
@@ -418,4 +422,9 @@ class multiGPR():
             plt.fill_between(x.ravel(),mean.ravel() + 1. * std,mean.ravel() - 1. * std, alpha=0.3,color='lime')
         plt.xlabel('$x$')
         plt.ylabel('$y$')
+    def getParams(self):
+        print "rho:  ", self.rho
+        print "sig_n:", self.params[0]
+        print "l:    ", 1/self.params[1]
+
 ################################################################################
