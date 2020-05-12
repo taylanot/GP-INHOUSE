@@ -312,7 +312,7 @@ class multiGPR():
         self.Xc           = Xc
         self.yc           = yc
         self.y            = np.vstack((yc,ye))
-        self.stab         = 1e-6
+        self.stab         = 1e-4
         self.lowreg()
         self.bound        = ()
         self.params       = self.hyperparams()
@@ -327,7 +327,7 @@ class multiGPR():
 
         if self.noise_e is not None and self.noise_fix_e is False:
             sigma_n_e   = np.array([self.noise_e])
-            hyper_e     = np.concatenate([hyper_e,np.log(sigma_n_e)])
+            hyper_e     = np.concatenate([hyper_e,sigma_n_e])
             self.bound  += ((1e-6,None),)
 
         #rho = np.array([1.])
@@ -356,6 +356,7 @@ class multiGPR():
 
     # log marginal likelihood
     def likelihood(self, hyper):
+        #print self.params,self.bound
 
         if (self.noise_e is not None and self.noise_fix_e is False):
             sigma_n_e = hyper[2]
