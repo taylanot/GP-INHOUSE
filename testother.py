@@ -21,28 +21,27 @@ def fc(x):
     return A*fe(x) +B*(x-0.5)-C
 ################################################################################
 plt.figure(1)
-plt.subplot(121)
-Xe = np.array([0,0.4,0.6,1]).reshape(-1,1)
+Xe = np.array([0,0.2,0.4,0.6,1]).reshape(-1,1)
 plt.scatter(Xe,fe(Xe),color='k',label='Expensive Sample')
-Xc = np.linspace(0,1,11).reshape(-1,1)
-plt.scatter(Xc,fc(Xc),marker='^',color='k',label='Cheap Sample')
+Xc = np.linspace(0,1,5).reshape(-1,1)
+noise = 0
+#noise = np.random.uniform(-1,1,(Xc.size)).reshape(-1,1)
+plt.scatter(Xc,fc(Xc)+noise,marker='^',color='k',label='Cheap Sample')
 x  = np.linspace(0,1,100).reshape(-1,1)
 plt.plot(x,fe(x),'-',color='k',linewidth=2.,label='Expensive')
 plt.plot(x,fc(x),'-',color='darkorange',label='Cheap')
 # Regular GPR with just Expnesive sample
-reg1 = GPR(Xe,fe(Xe),noise_var=None,noise_fix=True);
+reg1 = GPR(Xe,fe(Xe),noise_var=None,noise_fix=False);
 reg1.plot(name='Expensive',plot_std=True)
+regc = GPR(Xc,fc(Xc));
+regc.plot(name='cheap',plot_std=False)
 # Regular GPR with just Expnesive sample
-reg2 = multiGPR(Xc,Xe,fc(Xc),fe(Xe));
+reg2 = multiGPR(Xc,Xe,fc(Xc)+noise,fe(Xe),);
 reg2.plot(name='Expensive',plot_std=True)
 m2,std2 = reg2.inference(x,return_std=True)
 plt.legend()
 reg2.getParams()
 # Error Calculation
 print('multiGPR ||Error|| = {}'.format(np.linalg.norm(std2)))
-plt.subplot(122)
-plt.plot(x,std2**2,color='k',label='variance')
-plt.xlabel('$x$')
-plt.ylabel('$variance$')
 plt.legend()
 plt.show()

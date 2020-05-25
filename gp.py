@@ -39,7 +39,7 @@ class GPR:
         self.id_theta   = np.arange(hyper.shape[0])
         for i in range(0,self.dim+1):
             self.bound  += ((1e-6,None),)
-        if self.noise is not None and self.noise_fix is False:
+        if self.noise != None and self.noise_fix is False:
             sigma_n     = np.array([self.noise])
             hyper       = np.concatenate([hyper,sigma_n])
             self.bound  += ((1e-6,None),)
@@ -56,10 +56,13 @@ class GPR:
 
     # Objective function to be minimized
     def likelihood(self,hyper):
-        if self.noise is not None and self.noise_fix is False:
+        if self.noise != None and self.noise_fix is False:
             sigma_n  = hyper[-1]
+        elif self.noise != None and self.noise_fix is True:
+            sigma_n  = self.noise
         else:
             sigma_n  = 0.
+
         theta = hyper[self.id_theta];self.theta = theta
 
         K = self.RBF(theta,self.X)+np.eye(self.N)*sigma_n;      self.K = K
@@ -108,10 +111,11 @@ class GPR:
             raise Exception('Dimension of X should be 1 for this method...')
 
         x = np.linspace(np.min(self.X),np.max(self.X),100).reshape(-1,1)
-        self.optimize(restart=10)
+        self.optimize(restart=2)
         self.likelihood(self.params)
         mean,std = self.inference(x,return_std=True)
         plt.plot(x,mean,"--",label='GPR-'+str(name), color='deepskyblue')
+        plt.scatter(self.X,self.y,label='GPR-Train'+str(name), color='deepskyblue')
         if plot_std is True:
             plt.fill_between(x.ravel(),mean.ravel() + 2. * std,mean.ravel() - 2. * std, alpha=0.2,color='deepskyblue');
             plt.fill_between(x.ravel(),mean.ravel() + 1. * std,mean.ravel() - 1. * std, alpha=0.3,color='deepskyblue');
@@ -165,7 +169,7 @@ class coGPR():
         self.id_theta_c = np.arange(hyper_c.shape[0])
         for i in range(0,self.dim+1):
             self.bound += ((1e-6,None),)
-        if self.noise_c is not None and self.noise_fix_c is False:
+        if self.noise_c != None and self.noise_fix_c is False:
             sigma_n_c   = np.array([self.noise_c])
             hyper_c     = np.concatenate([hyper_c,sigma_n_c])
             self.bound  += ((1e-6,None),)
@@ -174,7 +178,7 @@ class coGPR():
         for i in range(0,self.dim+1):
             self.bound += ((1e-6,None),)
         self.id_theta_e = np.arange(hyper_c.shape[0],hyper_c.shape[0] + hyper_e.shape[0])
-        if self.noise_e is not None and self.noise_fix_e is False:
+        if self.noise_e != None and self.noise_fix_e is False:
             sigma_n_e   = np.array([self.noise_e])
             hyper_e     = np.concatenate([hyper_e,sigma_n_e])
             self.bound  += ((1e-6,None),)
@@ -196,14 +200,14 @@ class coGPR():
 
     # Log Marginal likelihood
     def likelihood(self, hyper):
-        if (self.noise_c is not None and self.noise_fix_c is False):
+        if (self.noise_c != None and self.noise_fix_c is False):
             sigma_n_c = hyper[2]
-            if (self.noise_e is not None and self.noise_fix_e is False):
+            if (self.noise_e != None and self.noise_fix_e is False):
                 sigma_n_e = hyper[5]
             else:
                 sigma_n_e = 0.
-        elif (self.noise_c is None and self.noise_fix_c is False) and \
-             (self.noise_e is not None and self.noise_fix_e is False):
+        elif (self.noise_c == None and self.noise_fix_c is False) and \
+             (self.noise_e != None and self.noise_fix_e is False):
                 sigma_n_e = hyper[4]
                 sigma_n_c    = 0.
         else:
@@ -325,7 +329,7 @@ class multiGPR():
         for i in range(0,self.dim+1):
             self.bound  += ((1e-6,None),)
 
-        if self.noise_e is not None and self.noise_fix_e is False:
+        if self.noise_e != None and self.noise_fix_e is False:
             sigma_n_e   = np.array([self.noise_e])
             hyper_e     = np.concatenate([hyper_e,sigma_n_e])
             self.bound  += ((1e-6,None),)
@@ -340,10 +344,10 @@ class multiGPR():
     def lowreg(self):
         self.model_low  = GPR(self.Xc,self.yc,self.noise_c,self.noise_fix_c)
 
-        self.model_low.optimize()
+        self.model_low.optimize(restart=2)
 
         self.mc,self.covc = self.model_low.inference(self.Xe)
-        print self.model_low.params
+        #print self.model_low.params
 
     # RBF Covariance Matrix
     def RBF(self,hyper,xi,xj=None):
@@ -358,7 +362,7 @@ class multiGPR():
     def likelihood(self, hyper):
         #print self.params,self.bound
 
-        if (self.noise_e is not None and self.noise_fix_e is False):
+        if (self.noise_e != None and self.noise_fix_e is False):
             sigma_n_e = hyper[2]
         else:
             sigma_n_e = 0.
@@ -415,9 +419,10 @@ class multiGPR():
         if self.Xe.shape[1] > 1:
             raise Exception('Dimension of Xe and Xc should be 1 for this method...')
         x = np.linspace(np.min(self.Xe),np.max(self.Xe),100).reshape(-1,1)
-        self.optimize(restart=2);
+        self.optimize(restart=10);
         mean,std = self.inference(x,return_std=True)
         plt.plot(x,mean,":",label='multiGPR-'+str(name), color='lime')
+        plt.scatter(self.Xe,self.ye,color='lime',label='multiGPR-'+str(name))
         if plot_std is True:
             plt.fill_between(x.ravel(),mean.ravel() + 2. * std,mean.ravel() - 2. * std, alpha=0.2,color='lime')
             plt.fill_between(x.ravel(),mean.ravel() + 1. * std,mean.ravel() - 1. * std, alpha=0.3,color='lime')
@@ -425,7 +430,7 @@ class multiGPR():
         plt.ylabel('$y$')
     def getParams(self):
         print "rho:  ", self.rho
-        print "sig_n:", self.params[0]
+        print "sig_f:", self.params[0]
         print "l:    ", 1/self.params[1]
 
 ################################################################################
